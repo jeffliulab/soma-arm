@@ -1,0 +1,32 @@
+# SO-ARM100 Robot Arm Configuration
+
+robot:
+  name: "SO-ARM100"
+  num_joints: 6  # 5 arm + 1 gripper
+  joint_names:
+    - "joint1"  # base rotation
+    - "joint2"  # shoulder
+    - "joint3"  # elbow
+    - "joint4"  # wrist pitch
+    - "joint5"  # wrist roll
+    - "gripper"
+  joint_limits_deg:
+    joint1: [-180, 180]
+    joint2: [-90, 90]
+    joint3: [-135, 135]
+    joint4: [-90, 90]
+    joint5: [-180, 180]
+    gripper: [0, 100]  # percent open
+
+ik:
+  robot_reach: 0.3
+  human_arm_length: 0.6
+  velocity_limit: 0.5
+  smooth_factor: 0.3
+
+simulation:
+  control_freq: 20
+  sim_steps_per_control: 10
+  image_width: 640
+  image_height: 480
+  max_episode_steps: 500
