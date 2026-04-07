@@ -38,12 +38,58 @@ A fixed tabletop manipulator that listens to natural language ("put the red toy 
 
 ## Hardware
 
-- **Arm**: [Waveshare RoArm-M2-S](https://www.waveshare.com/roarm-m2-s.htm) — 4-DOF, ~28 cm reach, ~500 g payload, USB serial
-- **Camera**: Logitech C922 Pro Stream — USB UVC, fixed overhead at ~60 cm
-- **Teleop input**: PDP Wired Controller for Xbox — XInput / `xpad` driver
-- **Compute**: Desktop with RTX 4090, Windows 11 + WSL2 Ubuntu 22.04, CUDA passthrough
-- **Workspace**: ~30×40 cm tabletop with solid backdrop and small plush toys / bins
-- **No mobile base, no Pi 5, no LiDAR** in v1 — see [开发进度与待办事项.md](开发进度与待办事项.md) for the rationale
+![Workstation overview](docs/smart-robot-arm.jpg)
+
+### Compute
+
+| Component | Spec | Role |
+|---|---|---|
+| **Desktop PC** | Windows 11 + RTX 4090 (24 GB VRAM) | Hosts everything: training, inference, perception, ROS 2, ANIMA, Claude API client |
+| **Dev environment** | WSL2 + Ubuntu 22.04 + CUDA passthrough | Native Linux for ROS 2 / LeRobot ecosystem; CUDA passthrough preserves 100% RTX 4090 performance vs dual-boot |
+| **USB forwarding** | `usbipd-win` (Windows) → `/dev/video0`, `/dev/ttyUSB0`, `/dev/input/js0` (WSL2) | All hardware plugs directly into the desktop; no Pi, no WiFi, no multi-machine |
+
+### Robot
+
+| Component | Spec | Role |
+|---|---|---|
+| **Arm** | [Waveshare RoArm-M2-S](https://www.waveshare.com/roarm-m2-s.htm) | 4-DOF, ~28 cm reach, ~500 g payload, ESP32 + STS3215 servos, USB serial |
+| **Mounting** | C-clamp at the right edge of the work table | Fixed installation; arm base is rigid w.r.t. the workspace so eye-to-hand calibration stays valid |
+| **End effector** | Built-in 2-finger gripper (~5-6 cm opening) | Top-down grasps only |
+
+### Perception
+
+| Component | Spec | Role |
+|---|---|---|
+| **Camera** | Logitech C922 Pro Stream Webcam | USB UVC, 1080p @ 30 fps, ALOHA-canonical hardware. Auto-exposure / white-balance / focus locked via `v4l2-ctl` for ACT training data consistency |
+| **Camera mount** | JOBY GorillaPod flexible tripod | Wraps around the table edge; ~50–60 cm above the workspace, slight side-down angle (≈ 60°) |
+| **Workspace lighting** | Dedicated LED desk lamp | Independent from room lighting; gives consistent illumination across teleop sessions and ACT inference |
+
+### Workspace and objects
+
+| Item | Spec | Notes |
+|---|---|---|
+| **Work surface** | ~60×50 cm wood-grain table top | ⚠️ The wood grain is a busy background. A solid-color mat (black KT board, ~$3) is on the to-buy list to improve Grounding DINO + SAM2 reliability |
+| **Manipulation objects** | Yellow / green dual-sided sponge cubes, ~4-5 cm | Compliant material is forgiving of the arm's ~1-2 mm hobby-servo repeatability; the two-color faces allow "find the one with green side up"–style language tasks |
+| **Target container** | Plastic bin with green outer rim and white interior, ~15×12 cm | High-contrast interior makes vision-based "object placed in bin?" verification easy |
+
+### Teleop and data collection
+
+| Component | Spec | Role |
+|---|---|---|
+| **Teleop input** | PDP Wired Controller for Xbox ([pdp.com](https://pdp.com)) | XInput protocol, recognized natively by Linux `xpad` driver as `/dev/input/js0` after `usbipd attach`. 4 stick axes map 1:1 to the 4 arm joints; LB/RB control gripper open/close; LT/RT analog triggers can modulate gripper speed for fine grasps |
+
+### What's intentionally NOT in v1
+
+| Component | Why |
+|---|---|
+| ❌ **Raspberry Pi 5 / any SBC** | Workstation is fixed; the desktop PC handles everything via direct USB. SBCs are reserved for v2 embedded deployment |
+| ❌ **Mobile base / wheels / motors** | v1 is a fixed manipulator. Mobile manipulation is a v2+ scope expansion |
+| ❌ **LiDAR** | No navigation in v1 |
+| ❌ **Depth camera (RealSense, etc.)** | The fixed overhead RGB camera + known table plane gives unique pixel→world coordinates without depth. Depth is redundant unless we add stacking tasks |
+| ❌ **Force / torque sensors** | The RoArm-M2-S hobby servos don't expose force feedback. Manipulation strategy is "rigid top-down grasps only" |
+| ❌ **Second arm** | Bimanual manipulation is a v2+ goal |
+
+See [开发进度与待办事项.md](开发进度与待办事项.md) for the full rationale and the 8-week sprint plan.
 
 ## Repository layout
 
