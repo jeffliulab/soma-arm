@@ -3,7 +3,7 @@
 [![en](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
 [![zh](https://img.shields.io/badge/lang-中文-red.svg)](README_zh.md)
 
-<h1>SmartRobotArm</h1>
+<h1>SOMA Chess O1</h1>
 
 <p>
   <img src="https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white" alt="Python">
@@ -11,12 +11,13 @@
   <img src="https://img.shields.io/badge/ROS_2-Humble-22314E?logo=ros&logoColor=white" alt="ROS 2">
   <img src="https://img.shields.io/badge/LeRobot-HuggingFace-FFD21E?logo=huggingface&logoColor=black" alt="LeRobot">
   <img src="https://img.shields.io/badge/Claude-API-D97757?logo=anthropic&logoColor=white" alt="Claude API">
+  <img src="https://img.shields.io/badge/Chess-v2_goal-8B4513" alt="Chess">
   <img src="https://img.shields.io/badge/Status-Active-brightgreen" alt="Status">
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
 </p>
 
 <p>
-  <strong>A language-driven smart robot arm — natural language → LLM task parsing → ACT skill execution → vision-based validation, on real hardware.</strong>
+  <strong>A language-driven robot arm — natural language → LLM task parsing → ACT skill execution → vision-based validation, on real hardware. v1: pick and sort objects (sponges + chess pieces) by voice command. v2: play any board game.</strong>
 </p>
 
 <p>
@@ -33,16 +34,19 @@
 
 ## Overview
 
-SmartRobotArm is a real-robot demonstration of language-driven manipulation. A user speaks a natural-language instruction; a Claude-based parser turns it into a structured task spec; open-vocabulary perception (Grounding DINO + SAM2) grounds the language to objects in the scene; an imitation-learning policy (ACT, trained on real teleop demos via LeRobot) executes skill primitives on a 4-DOF arm; and a vision-based validator verifies each step before reporting back.
+**SOMA Chess O1** is the first open-source version of the SOMA robotic arm series — a language-driven manipulation system built on the [ANIMA](https://github.com/jeffliulab/ANIMA_O1) cognitive framework. A user speaks a natural-language instruction; a Claude-based parser turns it into a structured task spec; open-vocabulary perception (Grounding DINO + SAM2) grounds the language to objects in the scene; an imitation-learning policy (ACT, trained on real teleop demos via LeRobot) executes skill primitives on a 4-DOF arm; and a vision-based validator verifies each step before reporting back.
 
-The project is built around the open-source [ANIMA](https://github.com/jeffliulab/ANIMA_O1) cognitive framework — an LLM-as-Parser, behavior-tree-based architecture with a test-and-check validation loop.
+**v1 goal**: pick and sort two physically distinct object classes — foam sponge cubes (forgiving, for basic grasping) and chess pieces (smaller, demanding precision) — demonstrating that a single cognitive layer can orchestrate different grip strategies for different objects.
+
+**v2 goal (closed-source, future)**: actual chess playing — board state recognition, move planning via Stockfish + Claude, physical move execution, and a "universal board game" interface where describing any game's rules in natural language is enough to play it.
 
 ## Highlights
 
-- **Language → real-robot action loop, end to end.** Speak `"put the green sponge in the bin"` and the system grounds the language, plans the task, executes the skill on real hardware, and verifies success — all on a single workstation.
+- **Language → real-robot action loop, end to end.** Speak `"put everything in the bin"` and the system finds all objects, plans the task, executes skill primitives on real hardware, validates success after each step — all on a single workstation.
+- **Two object classes, one cognitive layer.** The same ANIMA pipeline handles foam sponge cubes and chess pieces without code changes — only the gripper width parameter differs. This demonstrates that the cognitive architecture generalizes across physically distinct objects.
 - **Cognitive layer with verifiable reasoning.** Built on the open-source ANIMA framework: LLM-as-Parser (not LLM-as-Translator) emits structured TaskSpecs, a py_trees behavior tree executes them, and a test-and-check validator catches failures and triggers natural-language recovery.
 - **Real-world imitation learning, not just simulation.** Teleop demos collected on the actual hardware via LeRobot, published as public LeRobotDataset on HuggingFace Hub, and trained into ACT (Action Chunking Transformer) policies with quantified per-skill success rates.
-- **Open-vocabulary perception out of the box.** Grounding DINO + SAM2 turn arbitrary text queries (`"the green sponge"`, `"the empty bin"`) into world coordinates with no per-object training.
+- **Open-vocabulary perception out of the box.** Grounding DINO + SAM2 turn arbitrary text queries (`"the green sponge"`, `"the chess piece"`, `"the empty bin"`) into world coordinates with no per-object training.
 - **Fully open source.** Apache-2.0, public dataset, public code, public model weights — anyone with a Logitech C922 and a hobby arm can reproduce it.
 
 ---
@@ -92,7 +96,7 @@ The project is built around the open-source [ANIMA](https://github.com/jeffliula
        └─────────────────────────────┘
 ```
 
-The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is robot-agnostic. SmartRobotArm provides the skill registry, sensor configuration, and hardware driver; ANIMA handles everything from language understanding to skill dispatch. The same cognitive layer can be reused on other robot embodiments.
+The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is robot-agnostic. SOMA Chess O1 provides the skill registry, sensor configuration, and hardware driver; ANIMA handles everything from language understanding to skill dispatch. The same cognitive layer can be reused on other robot embodiments.
 
 ---
 
@@ -102,7 +106,7 @@ The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is
 
 | Component | Spec |
 |---|---|
-| **Desktop PC** | Windows 11 + RTX 4090 (24 GB VRAM) |
+| **Workstation laptop** | Windows 11 + RTX 4090 Laptop GPU (16 GB VRAM) |
 | **Dev environment** | WSL2 + Ubuntu 22.04 + CUDA passthrough |
 | **USB integration** | `usbipd-win` forwards camera, arm, and gamepad directly into WSL2 |
 
@@ -127,7 +131,7 @@ The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is
 | Item | Spec |
 |---|---|
 | **Work surface** | ~60×50 cm tabletop with solid-color background mat |
-| **Manipulation objects** | Yellow / green dual-sided sponge cubes, ~4–5 cm |
+| **Manipulation objects** | Yellow / green dual-sided sponge cubes (~4–5 cm) + chess pieces (pawns and rooks primarily for v1) |
 | **Target container** | Plastic bin with green outer rim and white interior, ~15×12 cm |
 
 ### Teleop
@@ -179,7 +183,7 @@ ACT-trained atomic skills, exposed as building blocks for the cognitive layer:
 
 | Primitive | Description |
 |---|---|
-| `pick(x, y)` | Top-down grasp at the given world coordinate |
+| `pick(x, y, object_class)` | Top-down grasp at the given world coordinate; gripper width selected by object class |
 | `place(x, y)` | Release at the given world coordinate |
 | `push(from, to)` | Non-prehensile push between two coordinates |
 
@@ -190,28 +194,28 @@ The cognitive layer composes primitives into tasks of increasing complexity:
 **Single-step language grounding**
 
 - *"Put the green sponge in the bin."*
-- *"Pick up the yellow one."*
+- *"Pick up the pawn."*
 
 **Multi-step long-horizon tasks**
 
-- *"Sort the sponges by color into the matching bins."*
+- *"Sort everything into the bin."*  ← v1 flagship: handles both sponges and chess pieces in one command
 - *"Stack the three green sponges."*
 - *"Clean up the table."*
 
 **Conditional and spatial reasoning**
 
-- *"If there's a green sponge, put it in the bin. Otherwise put the yellow one in."*
+- *"If there's a sponge on the left, put it in the bin. Otherwise put the chess piece in."*
 - *"Put the green sponge to the left of the yellow one."*
-- *"Pick up the sponge that doesn't match the others."*
+- *"Pick up the piece that doesn't belong."*
 
 **Test-and-check with failure recovery**
 
-- *"Pick up the green sponge."*
-- → first attempt → fails
-- → ANIMA verifies via vision: object still in original position
+- *"Put everything in the bin."*
+- → picks sponge → validator confirms → picks chess piece → gripper slips
+- → ANIMA verifies via vision: chess piece still at original position
 - → retry
 - → still fails
-- → natural-language report: *"I tried twice and the gripper slipped. Want me to try a different angle?"*
+- → natural-language report: *"I tried twice and the gripper slipped on the chess piece. Want me to retry?"*
 
 The test-and-check loop is a signature feature of ANIMA and is rare among LLM-on-robot demonstrations.
 
@@ -220,7 +224,7 @@ The test-and-check loop is a signature feature of ANIMA and is rare among LLM-on
 ## Project Structure
 
 ```
-SmartRobotArm/
+SOMA_CHESS_O1/                   # GitHub repo name
 ├── README.md                    # this file (English)
 ├── README_zh.md                 # Chinese version
 ├── LICENSE                      # Apache-2.0
@@ -228,10 +232,12 @@ SmartRobotArm/
 ├── docs/
 │   ├── DEVELOPMENT.md
 │   ├── FAQ-硬件与仿真.md
-│   └── smart-robot-arm.jpg      # workstation photo
+│   └── 机械臂技术文档.md        # RoArm-M2-S protocol + ROS 2 interface + safety
 └── src/                         # ROS 2 workspace (colcon build)
-    ├── anima_node/              # cognitive layer
-    ├── arm_description/         # URDF + verification sim
+    ├── anima_node/              # ANIMA cognitive layer wrapper
+    ├── arm_description/         # URDF + Gazebo verification scene
+    ├── arm_driver/              # RoArm-M2-S USB serial driver + MoveIt2 bridge
+    ├── arm_teleop/              # PDP Xbox gamepad teleop node
     └── arm_bringup/             # top-level launch
 ```
 
@@ -244,7 +250,7 @@ SmartRobotArm/
 ### Build
 
 ```bash
-cd ~/SmartRobotArm
+cd ~/SOMA/SOMA_CHESS_O1
 colcon build --symlink-install
 source install/setup.bash
 ```
@@ -282,9 +288,11 @@ usbipd attach --wsl --busid <PDP_GAMEPAD_BUSID>
 
 **Author**: [Jeff Liu Lab](https://jeffliulab.com) — [@jeffliulab](https://github.com/jeffliulab).
 
-**Reusable cognitive layer**. The [ANIMA framework](https://github.com/jeffliulab/ANIMA_O1) is developed as a separate open-source project so it can be reused on other robot embodiments — SmartRobotArm is the first reference implementation.
+**Reusable cognitive layer**. The [ANIMA framework](https://github.com/jeffliulab/ANIMA_O1) is developed as a separate open-source project so it can be reused on other robot embodiments — SOMA Chess O1 is the first reference implementation.
 
-**Long-term vision**. The goal of building the ANIMA cognitive framework is to eventually realize the SOMA home robot — a household robot that helps with chores and makes everyday life happier. SmartRobotArm is the manipulator capability layer of that future home robot; the fixed-station workstation here will eventually be integrated onto a mobile platform.
+**v1 → v2 roadmap**. v1 (this repo, open-source) delivers language-driven pick-and-sort for sponges and chess pieces. v2 (closed-source, future) adds actual chess playing: board state recognition, Stockfish + Claude move planning, physical move execution, and a "universal board game" interface — describe any game's rules in natural language and the robot can play it.
+
+**Long-term vision**. The goal is the SOMA home robot — a household robot that helps with chores and makes everyday life happier. SOMA Chess O1 is the manipulator capability layer; the fixed-station form factor here will eventually be integrated onto a mobile platform.
 
 ---
 

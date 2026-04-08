@@ -1,19 +1,21 @@
-# SmartRobotArm — Project conventions
+# SOMA Chess O1 — Project conventions
 
 > This file is read by Claude Code at the start of every conversation. Keep it accurate and concise.
 
 ## What this project is
 
-**SmartRobotArm** is a fixed tabletop manipulator powered by natural language. The user speaks an instruction, the [ANIMA](https://github.com/jeffliulab/ANIMA_O1) cognitive layer parses it via Claude API into a structured task spec, perception (Grounding DINO + SAM2) grounds language to world coordinates, a py_trees behavior tree dispatches ACT-trained skill primitives, and a test-and-check validator confirms success or triggers recovery.
+**SOMA Chess O1** is the first open-source version of the SOMA robotic arm series — a fixed tabletop manipulator powered by natural language. The user speaks an instruction, the [ANIMA](https://github.com/jeffliulab/ANIMA_O1) cognitive layer parses it via Claude API into a structured task spec, perception (Grounding DINO + SAM2) grounds language to world coordinates, a py_trees behavior tree dispatches ACT-trained skill primitives, and a test-and-check validator confirms success or triggers recovery.
+
+**v1 goal (this repo, open-source, Apache-2.0)**: pick-and-sort two object classes — foam sponge cubes and chess pieces — into a bin, driven by natural language, with error detection and retry.
+
+**v2 goal (separate private repo, future)**: actual chess playing — board state recognition, Stockfish + Claude move planning, physical move execution, and a "universal board game" interface where describing any game's rules in natural language is enough to play it.
 
 This is a **portfolio / job-hunting project**, public Apache-2.0, written by Jeff Liu Lab. Optimize all decisions for **legibility to a hiring manager in the embodied AI / robotics space**, not for academic novelty or production hardening.
-
-The long-term vision is for the manipulator to become the arm of a SOMA Home domestic robot. v1 deliberately scopes mobile manipulation, garment handling, bimanual, and force feedback OUT — those are v2+ goals.
 
 ## Repo lineage and current scope
 
 - **Migrated from** [`soma_home_exp_v1`](https://github.com/jeffliulab/soma_home_exp_v1) (now archived) on 2026-04-07. ANIMA nodes, URDF, launch files, and the 8-week sprint plan all came from there.
-- **Cognitive framework dependency**: [`ANIMA_O1`](https://github.com/jeffliulab/ANIMA_O1) — separate Python framework repo. SmartRobotArm wraps ANIMA in ROS 2 nodes.
+- **Cognitive framework dependency**: [`ANIMA_O1`](https://github.com/jeffliulab/ANIMA_O1) — separate Python framework repo. SOMA Chess O1 wraps ANIMA in ROS 2 nodes.
 - **Long-term design context**: lives in `SOMA_HOME_EXP/` and `ANIMA_FRAMEWORK/` design folders (private monorepo, not public). Some of those documents are STALE because they predate the pivot — check `SOMA_HOME_EXP/CLAUDE.md` for which files are current.
 - **Earlier commit on this repo** is unrelated SO-ARM100 + LEAP Hand + MediaPipe exploration that was rebuilt from scratch. Don't reference any of it.
 
@@ -28,13 +30,13 @@ The long-term vision is for the manipulator to become the arm of a SOMA Home dom
 - **Teleop input**: PDP Wired Controller for Xbox — XInput, user already owns (busid `1-3` on this machine)
 - **Compute**: Workstation laptop, **RTX 4090 Laptop GPU (16 GB VRAM)** — note: NOT the desktop 24 GB variant; this was misdocumented earlier
 - **No Pi 5, no mobile base, no LiDAR in v1** — everything plugs directly into the host PC
-- **Object set**: yellow/green dual-sided sponge cubes + green-rim white-interior plastic bin (user already owns)
+- **Object set v1**: yellow/green dual-sided sponge cubes (~4-5cm) + chess pieces (pawns and rooks primary; mixed types for demo) + green-rim white-interior plastic bin
 
 ## Development environment (locked 2026-04-07)
 
 - **Host**: Windows 11 (user's primary OS, GPU known to perform at full capacity here)
 - **Dev**: WSL2 + Ubuntu 22.04 — chosen over dual-boot Linux because the user's hardware suffers GPU performance loss on dual-boot. WSL2 + CUDA passthrough preserves full RTX 4090 Laptop performance.
-- **Python venv**: `~/SOMA/SmartRobotArm/.venv/`, created with `python3 -m venv --system-site-packages .venv`. The `--system-site-packages` flag is **mandatory** so the venv can import the system `rclpy` from `/opt/ros/humble/...`. LeRobot, pygame, pyserial, torch (with CUDA) are installed inside this venv.
+- **Python venv**: `~/SOMA/SOMA_CHESS_O1/.venv/`, created with `python3 -m venv --system-site-packages .venv`. The `--system-site-packages` flag is **mandatory** so the venv can import the system `rclpy` from `/opt/ros/humble/...`. LeRobot, pygame, pyserial, torch (with CUDA) are installed inside this venv.
 - **USB**: `usbipd-win` forwards RoArm (busid `1-4`, CP2102N), PDP gamepad (busid `1-3`), and C922 (TBD) to WSL2 as `/dev/ttyUSB0`, `/dev/input/js0`, `/dev/video0`. **Each Windows reboot needs a fresh `usbipd attach`** — see [scripts/attach_devices.bat](scripts/attach_devices.bat).
 - **ROS 2**: Humble Hawksbill (LTS, best LeRobot compat). MoveIt2 installed via `apt install ros-humble-moveit`. Note: must `apt install --only-upgrade ros-humble-ompl` to get OMPL 1.7.0+ (provides `libompl.so.18`), otherwise `move_group` segfaults — known ROS Humble apt packaging mismatch.
 - **Graphics**: WSLg (Gazebo / RViz2 work but slower — fine since they're not the bottleneck)
@@ -44,7 +46,7 @@ The long-term vision is for the manipulator to become the arm of a SOMA Home dom
 ## Repository structure
 
 ```
-SmartRobotArm/
+SOMA_CHESS_O1/
 ├── README.md, LICENSE, CLAUDE.md, .gitignore
 ├── 开发进度与待办事项.md     # 8-week sprint plan (source of truth, gitignored as private)
 ├── .venv/                   # Python venv (gitignored), --system-site-packages
@@ -142,6 +144,7 @@ When recommending features or tasks, push back if any of these come up — they 
 - ❌ Reinforcement learning of any kind
 - ❌ Custom perception model training (Grounding DINO + SAM2 are pretrained)
 - ❌ VLA fine-tuning (Week 8 stretch only)
+- ❌ Actual chess playing (board state → legal move → physical move execution) — this is **v2**, in a separate private repo
 
 If the user wants to do any of these, treat it as a scope change worth discussing — don't silently agree.
 
