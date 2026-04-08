@@ -23,39 +23,53 @@ The long-term vision is for the manipulator to become the arm of a SOMA Home dom
 
 ## Hardware (locked 2026-04-07)
 
-- **Arm**: Waveshare RoArm-M2-S — 4-DOF, USB serial, hobby servo precision
+- **Arm**: Waveshare RoArm-M2-S — 4-DOF, USB serial via CP2102N, ESP32 + ST3215 servos, ~280mm reach, ~500g payload, ~826g
 - **Camera**: Logitech C922 Pro Stream Webcam — USB UVC, fixed overhead
-- **Teleop input**: PDP Wired Controller for Xbox — XInput, user already owns
-- **Compute**: Desktop with RTX 4090
-- **No Pi 5, no mobile base, no LiDAR in v1** — everything plugs directly into the desktop PC
-- **Object set**: small plush toys / figurines (user already owns)
+- **Teleop input**: PDP Wired Controller for Xbox — XInput, user already owns (busid `1-3` on this machine)
+- **Compute**: Workstation laptop, **RTX 4090 Laptop GPU (16 GB VRAM)** — note: NOT the desktop 24 GB variant; this was misdocumented earlier
+- **No Pi 5, no mobile base, no LiDAR in v1** — everything plugs directly into the host PC
+- **Object set**: yellow/green dual-sided sponge cubes + green-rim white-interior plastic bin (user already owns)
 
 ## Development environment (locked 2026-04-07)
 
 - **Host**: Windows 11 (user's primary OS, GPU known to perform at full capacity here)
-- **Dev**: WSL2 + Ubuntu 22.04 — chosen over dual-boot Linux because the user's hardware suffers GPU performance loss on dual-boot. WSL2 + CUDA passthrough preserves 100% RTX 4090 performance.
-- **USB**: `usbipd-win` forwards C922 + RoArm to WSL2's `/dev/video0` and `/dev/ttyUSB0`. **Each Windows reboot needs a fresh `usbipd attach`** — write an `attach_devices.bat` for convenience.
-- **ROS 2**: Humble Hawksbill (LTS, best LeRobot compat)
+- **Dev**: WSL2 + Ubuntu 22.04 — chosen over dual-boot Linux because the user's hardware suffers GPU performance loss on dual-boot. WSL2 + CUDA passthrough preserves full RTX 4090 Laptop performance.
+- **Python venv**: `~/SOMA/SmartRobotArm/.venv/`, created with `python3 -m venv --system-site-packages .venv`. The `--system-site-packages` flag is **mandatory** so the venv can import the system `rclpy` from `/opt/ros/humble/...`. LeRobot, pygame, pyserial, torch (with CUDA) are installed inside this venv.
+- **USB**: `usbipd-win` forwards RoArm (busid `1-4`, CP2102N), PDP gamepad (busid `1-3`), and C922 (TBD) to WSL2 as `/dev/ttyUSB0`, `/dev/input/js0`, `/dev/video0`. **Each Windows reboot needs a fresh `usbipd attach`** — see [scripts/attach_devices.bat](scripts/attach_devices.bat).
+- **ROS 2**: Humble Hawksbill (LTS, best LeRobot compat). MoveIt2 installed via `apt install ros-humble-moveit`. Note: must `apt install --only-upgrade ros-humble-ompl` to get OMPL 1.7.0+ (provides `libompl.so.18`), otherwise `move_group` segfaults — known ROS Humble apt packaging mismatch.
 - **Graphics**: WSLg (Gazebo / RViz2 work but slower — fine since they're not the bottleneck)
+- **Shell helper**: `srarm` function in `~/.bashrc` — one command to enter dev mode (cd into workspace + source ROS 2 + activate venv + source overlay)
+- **External upstream workspaces**: `~/SOMA/DRIVERS/roarm_ws_em0/` (Waveshare's ROS 2 + MoveIt2 config, only for the MoveIt2 mock+sidecar mode). Kept outside this repo and outside any git tracking. **Do not vendor third-party code into this repo** — license risk on a public Apache-2.0 portfolio repo.
 
 ## Repository structure
 
 ```
 SmartRobotArm/
 ├── README.md, LICENSE, CLAUDE.md, .gitignore
-├── 开发进度与待办事项.md     # 8-week sprint plan (source of truth)
+├── 开发进度与待办事项.md     # 8-week sprint plan (source of truth, gitignored as private)
+├── .venv/                   # Python venv (gitignored), --system-site-packages
 ├── docs/
 │   ├── DEVELOPMENT.md
-│   └── FAQ-硬件与仿真.md
+│   ├── FAQ-硬件与仿真.md
+│   └── 机械臂技术文档.md   # RoArm-M2-S 协议 + ROS 2 接口 + 安全操作(W1.5 产物)
+├── scripts/
+│   └── attach_devices.bat   # Windows-side usbipd attach script (RoArm + gamepad)
 └── src/                     # ROS 2 workspace, build with colcon
-    ├── anima_node/          # ANIMA cognitive layer ROS 2 wrapper
+    ├── anima_node/          # ANIMA cognitive layer ROS 2 wrapper (legacy from soma_home_exp_v1)
     ├── arm_description/     # URDF + Gazebo verification scene
-    └── arm_bringup/         # Top-level launch
+    ├── arm_bringup/         # Top-level launch
+    ├── arm_driver/          # ★ W1.5: RoArm-M2-S USB serial driver
+    │                        #   - roarm_protocol.py     pure Python protocol layer
+    │                        #   - arm_driver_node       /joint_command + /joint_states + /gripper_command
+    │                        #   - moveit_bridge_node    bridges MoveIt2 mock joint_states to real serial
+    │                        #   - probe                 standalone CLI for protocol smoke test
+    └── arm_teleop/          # ★ W1.7: PDP Xbox gamepad teleoperation
+        └── gamepad_teleop_node  reads /dev/input/js0 via pygame, publishes /joint_command @ 50 Hz
 ```
 
 ROS 2 packages added later in the sprint (W2-W3):
 - `arm_perception/` — Grounding DINO + SAM2
-- `arm_manipulation/` — MoveIt2 config + hardcoded primitives
+- `arm_manipulation/` — MoveIt2 config + hardcoded primitives (we'll generate our own MoveIt2 config to replace the borrowed Waveshare one)
 
 ## Conventions
 
@@ -68,23 +82,49 @@ ROS 2 packages added later in the sprint (W2-W3):
 ## Common commands
 
 ```bash
+# Enter dev mode (defined in ~/.bashrc)
+srarm
+
 # Build
-cd ~/SmartRobotArm
 colcon build --symlink-install
-source install/setup.bash
+# (already sourced by srarm if install/ exists)
 
-# Visualize URDF
-ros2 launch arm_description display.launch.py
+# ---------- arm hardware ----------
 
-# Launch arm + ANIMA mock parser
-ros2 launch arm_bringup full_system.launch.py llm_backend:=mock
+# Standalone protocol probe (no ROS — sanity check serial + read 1 state)
+python -m arm_driver.roarm_protocol            # default /dev/ttyUSB0
+python -m arm_driver.roarm_protocol /dev/ttyACM0
 
-# Test ANIMA with a string
-ros2 topic pub /user_instruction std_msgs/String "data: 'put the red toy in the blue bin'"
+# Mode A: direct ROS 2 driver (use this for our own teleop / direct command pipeline)
+ros2 launch arm_driver arm_driver.launch.py
+# In another shell:
+ros2 topic echo /joint_states --once
+ros2 topic pub --once /joint_command sensor_msgs/msg/JointState \
+  '{name: ["base_link_to_link1","link1_to_link2","link2_to_link3","link3_to_gripper_link"],
+    position: [0.0, 0.0, 1.5708, 0.75]}'
+ros2 topic pub --once /gripper_command std_msgs/msg/Float32 '{data: 1.5}'  # open
+ros2 topic pub --once /gripper_command std_msgs/msg/Float32 '{data: 0.0}'  # close
 
-# USB device forwarding (Windows PowerShell, after reboot)
-usbipd attach --wsl --busid <C922_BUSID>
-usbipd attach --wsl --busid <ROARM_BUSID>
+# Mode B: gamepad teleop (one-shot launches arm_driver + gamepad_teleop together)
+ros2 launch arm_teleop teleop.launch.py
+
+# Mode C: MoveIt2 + RViz drag-the-orange-ball (uses upstream Waveshare config)
+# Terminal A:
+source ~/SOMA/DRIVERS/roarm_ws_em0/install/setup.bash
+ros2 launch roarm_moveit interact.launch.py
+# Terminal B:
+srarm
+ros2 run arm_driver moveit_bridge_node
+
+# ⚠ Modes A / B / C are mutually exclusive — only one process at a time can hold /dev/ttyUSB0.
+
+# ---------- visualization ----------
+ros2 launch arm_description display.launch.py        # URDF in RViz only
+
+# ---------- USB device forwarding (Windows PowerShell, after each Windows reboot) ----------
+usbipd attach --wsl --busid 1-4    # RoArm-M2-S (CP2102N)
+usbipd attach --wsl --busid 1-3    # PDP Xbox gamepad
+# Or just double-click scripts/attach_devices.bat from the Windows desktop.
 ```
 
 ## What NOT to do (deliberately scoped out of v1)
