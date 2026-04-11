@@ -27,7 +27,7 @@ This is a **portfolio / job-hunting project**, public Apache-2.0, written by Jef
 
 - **Arm**: Waveshare RoArm-M2-S — 4-DOF, USB serial via CP2102N, ESP32 + ST3215 servos, ~280mm reach, ~500g payload, ~826g
 - **Camera**: Logitech C922 Pro Stream Webcam — USB UVC, fixed overhead
-- **Teleop input**: PDP Wired Controller for Xbox — XInput, user already owns (busid `1-3` on this machine)
+- **Teleop input**: PDP Wired Controller for Xbox — XInput, user already owns (as of 2026-04-10 it appears as busid `1-8` on this machine after the C922 was attached)
 - **Compute**: Workstation laptop, **RTX 4090 Laptop GPU (16 GB VRAM)** — note: NOT the desktop 24 GB variant; this was misdocumented earlier
 - **No Pi 5, no mobile base, no LiDAR in v1** — everything plugs directly into the host PC
 - **Object set v1**: yellow/green dual-sided sponge cubes (~4-5cm) + chess pieces (pawns and rooks primary; mixed types for demo) + green-rim white-interior plastic bin
@@ -37,7 +37,7 @@ This is a **portfolio / job-hunting project**, public Apache-2.0, written by Jef
 - **Host**: Windows 11 (user's primary OS, GPU known to perform at full capacity here)
 - **Dev**: WSL2 + Ubuntu 22.04 — chosen over dual-boot Linux because the user's hardware suffers GPU performance loss on dual-boot. WSL2 + CUDA passthrough preserves full RTX 4090 Laptop performance.
 - **Python venv**: `~/SOMA/SOMA_CHESS_O1/.venv/`, created with `python3 -m venv --system-site-packages .venv`. The `--system-site-packages` flag is **mandatory** so the venv can import the system `rclpy` from `/opt/ros/humble/...`. LeRobot, pygame, pyserial, torch (with CUDA) are installed inside this venv.
-- **USB**: Long-term recommended path is `usbipd-win` forwarding RoArm (busid `1-4`, CP2102N), PDP gamepad (busid `1-3`), and optionally C922 into WSL2 as `/dev/ttyUSB*`, `/dev/input/event*`, `/dev/video*`. This requires a custom WSL kernel with `JOYDEV + XPAD`; see [docs/WSL_Xbox手柄直通.md](docs/WSL_Xbox手柄直通.md) and [scripts/attach_devices.bat](scripts/attach_devices.bat). The Windows TCP bridge remains a fallback only.
+- **USB**: Long-term recommended path is now split: `usbipd-win` forwards the RoArm and Xbox gamepad into WSL2 as `/dev/ttyUSB*` and `/dev/input/event*`, while the Logitech C922 stays on native Windows and streams into WSL over a lightweight TCP camera bridge. Current recorded mapping on this machine (2026-04-10) is: RoArm = busid `1-4` (`CP2102N`), C922 = busid `1-3`, PDP gamepad = busid `1-8`. These busids may change after replugging, so always verify with `usbipd list` before assuming they are stable. The WSL-direct gamepad path requires a custom WSL kernel with `JOYDEV + XPAD`; see [docs/WSL_Xbox手柄直通.md](docs/WSL_Xbox手柄直通.md), [docs/Windows_TCP相机桥接.md](docs/Windows_TCP相机桥接.md), and [scripts/attach_devices.bat](scripts/attach_devices.bat). The Windows TCP bridge remains a fallback only.
 - **ROS 2**: Humble Hawksbill (LTS, best LeRobot compat). MoveIt2 installed via `apt install ros-humble-moveit`. Note: must `apt install --only-upgrade ros-humble-ompl` to get OMPL 1.7.0+ (provides `libompl.so.18`), otherwise `move_group` segfaults — known ROS Humble apt packaging mismatch.
 - **Graphics**: WSLg (Gazebo / RViz2 work but slower — fine since they're not the bottleneck)
 - **Shell helper**: `srarm` function in `~/.bashrc` — one command to enter dev mode (cd into workspace + source ROS 2 + activate venv + source overlay)
@@ -53,16 +53,22 @@ SOMA_CHESS_O1/
 ├── docs/
 │   ├── DEVELOPMENT.md
 │   ├── FAQ-硬件与仿真.md
+│   ├── Windows_TCP相机桥接.md
+│   ├── Windows_ROS相机桥接.md
 │   └── 机械臂技术文档.md   # RoArm-M2-S 协议 + ROS 2 接口 + 安全操作(W1.5 产物)
 ├── scripts/
 │   ├── attach_devices.bat   # Windows-side usbipd attach script (RoArm + gamepad direct to WSL)
 │   ├── build_wsl_gamepad_kernel.sh
 │   ├── check_wsl_gamepad_support.sh
+│   ├── start_camera_bridge_wsl.sh
 │   ├── start_teleop_wsl_gamepad.sh
 │   └── bridge方案/
 │       ├── attach_devices_bridge_mode.bat
 │       ├── bridge_gui.py, bridge_worker.py
-│       └── gamepad_bridge.py, start_bridge.bat
+│       ├── gamepad_bridge.py, start_bridge.bat
+│       ├── start_camera_bridge.bat, windows_camera_bridge.py
+│       ├── camera_bridge_receiver.py
+│       └── start_camera_ros_publisher.bat, windows_camera_ros_publisher.py
 └── src/                     # ROS 2 workspace, build with colcon
     ├── anima_node/          # ANIMA cognitive layer ROS 2 wrapper (legacy from soma_home_exp_v1)
     ├── arm_description/     # URDF + Gazebo verification scene
@@ -89,6 +95,7 @@ ROS 2 packages added later in the sprint (W2-W3):
 - **Naming**: ROS packages have NO `soma_` prefix anymore. They use `anima_node`, `arm_description`, `arm_bringup`, etc.
 - **Author / copyright**: always **"Jeff Liu Lab"** (jeffliulab.com, GitHub @jeffliulab). Don't drop the "Lab" suffix.
 - **Don't over-engineer**: this is pre-alpha. No CI, no packaging, no contribution guides, no code-of-conduct. Add them when there's a real reason.
+- **Dev log sync**: after each meaningful SOMA Chess O1 work session, update the parent-repo log at `~/SOMA/开发日志/SOMA_CHESS_O1/V1.0-开发日志.md`. Use a readable daily-work-journal style in Chinese with these sections: `一句话总结`, `今天做了什么`, `解决了什么问题`, `发现了什么问题`, `下一步`. If the default workflow or common commands changed, also update `~/SOMA/常用命令.md`.
 
 ## Common commands
 
@@ -142,8 +149,10 @@ ros2 launch arm_description display.launch.py        # URDF in RViz only
 
 # ---------- USB device forwarding (Windows PowerShell, after each Windows reboot) ----------
 usbipd attach --wsl --busid 1-4    # RoArm-M2-S (CP2102N)
-usbipd attach --wsl --busid 1-3    # PDP Xbox gamepad (preferred long-term path)
-# Or just double-click scripts/attach_devices.bat from the Windows desktop.
+usbipd attach --wsl --busid 1-8    # PDP Xbox gamepad (current recorded busid)
+# Do not attach the C922 here in the normal workflow.
+# Keep the camera on Windows and run scripts\bridge方案\start_camera_bridge.bat there.
+# Or just double-click scripts/attach_devices.bat from the Windows desktop for arm + gamepad only.
 ```
 
 ## Current teleop default (locked 2026-04-10)
@@ -175,6 +184,24 @@ usbipd attach --wsl --busid 1-3    # PDP Xbox gamepad (preferred long-term path)
   - Windows: `scripts\\bridge方案\\attach_devices_bridge_mode.bat`
   - Windows: `scripts\\bridge方案\\bridge_gui.py`
   - WSL: `ros2 launch arm_teleop teleop.launch.py use_tcp_bridge:=true`
+
+## Current camera default (locked 2026-04-10)
+
+- **Default operator-facing path**:
+  - Windows: `scripts\\bridge方案\\start_camera_bridge.bat`
+  - WSL: `scripts/start_camera_bridge_wsl.sh`
+- **Published ROS topics**:
+  - `/camera/image_raw`
+  - `/camera/camera_info`
+- **Current defaults**:
+  - `device_index=0`
+  - `1280x720 @ 30fps`
+  - `frame_id=camera_optical_frame`
+  - bridge host / port = `127.0.0.1:65433`
+  - backend preference = `MSMF`, fallback = `DSHOW`
+  - requested local capture format = `MJPG`, JPEG-encoded on Windows, decoded and republished in WSL
+- **Important note**:
+  - `arm_bringup camera_usb.launch.py` is now kept only as a reference / debugging path for the old WSL-direct camera route
 
 ## What NOT to do (deliberately scoped out of v1)
 

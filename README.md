@@ -108,7 +108,7 @@ The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is
 |---|---|
 | **Workstation laptop** | Windows 11 + RTX 4090 Laptop GPU (16 GB VRAM) |
 | **Dev environment** | WSL2 + Ubuntu 22.04 + CUDA passthrough |
-| **USB integration** | Long-term recommended path: `usbipd-win` forwards camera, arm, and gamepad directly into WSL2; direct gamepad mode uses a custom WSL kernel with `JOYDEV + XPAD` |
+| **USB integration** | Long-term recommended path: `usbipd-win` forwards the arm and gamepad into WSL2; the C922 stays on native Windows and is bridged into WSL over a lightweight TCP camera bridge |
 
 ### Robot
 
@@ -122,7 +122,7 @@ The four-layer ANIMA architecture (NLU → Planning → Execution → Policy) is
 
 | Component | Spec |
 |---|---|
-| **Camera** | Logitech C922 Pro Stream Webcam — USB UVC, 1080p @ 30 fps. Auto-exposure / white-balance / focus locked via `v4l2-ctl` for training data consistency |
+| **Camera** | Logitech C922 Pro Stream Webcam — USB UVC, 1080p @ 30 fps. Captured natively on Windows and bridged into WSL because the `usbipd + WSL` MJPG path tears on this machine |
 | **Camera mount** | JOBY GorillaPod flexible tripod, ~50–60 cm above the workspace |
 | **Workspace lighting** | Dedicated LED desk lamp, independent from room lighting |
 
@@ -277,10 +277,32 @@ ros2 topic pub /user_instruction std_msgs/String \
 ### USB device forwarding (Windows PowerShell, after every reboot)
 
 ```powershell
-usbipd attach --wsl --busid <C922_BUSID>
 usbipd attach --wsl --busid <ROARM_BUSID>
 usbipd attach --wsl --busid <PDP_GAMEPAD_BUSID>
 ```
+
+Keep the C922 on native Windows in the normal workflow.
+
+### Windows camera bridge
+
+From Windows:
+
+```bat
+scripts\bridge方案\start_camera_bridge.bat
+```
+
+In WSL:
+
+```bash
+scripts/start_camera_bridge_wsl.sh
+```
+
+WSL then publishes and subscribes to:
+
+- `/camera/image_raw`
+- `/camera/camera_info`
+
+The usage flow is documented in [docs/Windows_TCP相机桥接.md](docs/Windows_TCP相机桥接.md).
 
 ### Recommended long-term gamepad path (WSL direct attach)
 

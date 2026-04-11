@@ -108,7 +108,7 @@ ANIMA 四层架构（NLU → Planning → Execution → Policy）是机器人无
 |---|---|
 | **工作站笔记本** | Windows 11 + RTX 4090 Laptop GPU (16 GB VRAM) |
 | **开发环境** | WSL2 + Ubuntu 22.04 + CUDA passthrough |
-| **USB 集成** | 长期推荐：`usbipd-win` 把相机、机械臂、手柄直接转发到 WSL2；手柄模式需要自定义 WSL 内核开启 `JOYDEV + XPAD` |
+| **USB 集成** | 长期推荐：`usbipd-win` 只把机械臂和手柄转发到 WSL2；C922 留在 Windows 原生侧采集，再通过轻量 TCP bridge 发到 WSL |
 
 ### 机器人
 
@@ -122,7 +122,7 @@ ANIMA 四层架构（NLU → Planning → Execution → Policy）是机器人无
 
 | 组件 | 规格 |
 |---|---|
-| **相机** | Logitech C922 Pro Stream Webcam——USB UVC, 1080p @ 30 fps。通过 `v4l2-ctl` 锁定自动曝光 / 自动白平衡 / 自动对焦，保证训练数据一致性 |
+| **相机** | Logitech C922 Pro Stream Webcam——USB UVC, 1080p @ 30 fps。当前正式路线是在 Windows 原生取图，再通过轻量 bridge 发到 WSL，因为这台机器上的 `usbipd + WSL` MJPG 链路会出现横向破图 |
 | **相机支架** | JOBY GorillaPod 柔性三脚架，距工作区 ~50–60 cm |
 | **工作区光照** | 独立 LED 桌面台灯，与环境光分离 |
 
@@ -277,10 +277,32 @@ ros2 topic pub /user_instruction std_msgs/String \
 ### USB 设备转发（每次 Windows 重启后在 PowerShell 跑一次）
 
 ```powershell
-usbipd attach --wsl --busid <C922_BUSID>
 usbipd attach --wsl --busid <ROARM_BUSID>
 usbipd attach --wsl --busid <PDP_GAMEPAD_BUSID>
 ```
+
+正常工作流里，C922 不再 attach 到 WSL。
+
+### Windows 相机 bridge
+
+在 Windows 里运行：
+
+```bat
+scripts\bridge方案\start_camera_bridge.bat
+```
+
+WSL 里运行：
+
+```bash
+scripts/start_camera_bridge_wsl.sh
+```
+
+WSL 侧继续订阅：
+
+- `/camera/image_raw`
+- `/camera/camera_info`
+
+完整使用流程见 [docs/Windows_TCP相机桥接.md](docs/Windows_TCP相机桥接.md)。
 
 ### 长期推荐的手柄方案（WSL 直通）
 
